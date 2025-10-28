@@ -1,0 +1,64 @@
+# Local development stack: same images that run on Kubernetes, wired together with compose.
+name: fleetsync
+
+x-redis-env: &redis-env
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-fleetsync-dev}
+  LOG_LEVEL: INFO
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-fleetsync-dev}", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD:-fleetsync-dev}\" --no-auth-warning ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-fleetsync-dev}
+
+  registry:
+    build:
+      context: ./services
+      dockerfile: registry/Dockerfile
+    image: fleetsync/registry:dev
+    environment: *redis-env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  telemetry:
+    build:
+      context: ./services
+      dockerfile: telemetry/Dockerfile
+    image: fleetsync/telemetry:dev
+    environment:
+      <<: *redis-env
+      REDIS_DB: "1"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  gateway:
+    build:
+      context: ./services
+      dockerfile: gateway/Dockerfile
+    image: fleetsync/gateway:dev
+    environment:
+      REGISTRY_URL: http://registry:8000
+      TELEMETRY_URL: http://telemetry:8001
+      LOG_LEVEL: INFO
+    ports:
+      - "8080:8080"
+    depends_on:
+      registry:
+        condition: service_healthy
+      telemetry:
+        condition: service_healthy
+
+volumes:
+  redis-data:
