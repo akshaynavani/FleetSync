@@ -1,0 +1,66 @@
+# dev: smallest footprint, fast scale-down, verbose logs.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: fleetsync-dev
+
+resources:
+  - ../../base
+
+labels:
+  - pairs:
+      fleetsync.io/environment: dev
+    includeSelectors: false
+    includeTemplates: true
+
+configMapGenerator:
+  - name: fleetsync-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=DEBUG
+
+patches:
+  - target:
+      kind: Deployment
+      name: registry|gateway
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: telemetry
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 6
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: gateway
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 4
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: registry
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+  - target:
+      kind: Ingress
+      name: fleetsync
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: dev.fleetsync.local

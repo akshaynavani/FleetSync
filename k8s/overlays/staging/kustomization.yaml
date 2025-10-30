@@ -1,0 +1,40 @@
+# staging: production-like replica counts and a higher autoscaling ceiling.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: fleetsync-staging
+
+resources:
+  - ../../base
+
+labels:
+  - pairs:
+      fleetsync.io/environment: staging
+    includeSelectors: false
+    includeTemplates: true
+
+configMapGenerator:
+  - name: fleetsync-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=WARNING
+
+patches:
+  - path: telemetry-resources.yaml
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: telemetry
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 12
+  - target:
+      kind: Ingress
+      name: fleetsync
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: staging.fleetsync.local
