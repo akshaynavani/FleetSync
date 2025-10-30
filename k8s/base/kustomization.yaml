@@ -1,0 +1,39 @@
+# Base manifests shared by every environment. Composed with Kustomize (built into
+# kubectl) -- no Helm. The namespace, quotas, network policies and the `redis-auth`
+# Secret are owned by Terraform, so they are intentionally not declared here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: fleetsync
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+    includeTemplates: true
+
+resources:
+  - redis.yaml
+  - registry.yaml
+  - telemetry.yaml
+  - gateway.yaml
+  - hpa.yaml
+  - pdb.yaml
+  - ingress.yaml
+
+configMapGenerator:
+  - name: fleetsync-config
+    literals:
+      - LOG_LEVEL=INFO
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - UPSTREAM_TIMEOUT_S=10
+      - ENGINE_TEMP_ALERT_C=110
+      - LOW_FUEL_ALERT_PCT=10
+
+images:
+  - name: fleetsync/registry
+    newTag: "1.0.0"
+  - name: fleetsync/telemetry
+    newTag: "1.0.0"
+  - name: fleetsync/gateway
+    newTag: "1.0.0"
