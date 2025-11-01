@@ -32,9 +32,9 @@ resource "kubernetes_resource_quota_v1" "this" {
       "requests.memory"        = var.quota.requests_memory
       "limits.cpu"             = var.quota.limits_cpu
       "limits.memory"          = var.quota.limits_memory
-      "pods"                   = var.quota.pods
-      "persistentvolumeclaims" = var.quota.pvcs
-      "services.loadbalancers" = 0
+      "pods"                   = tostring(var.quota.pods)
+      "persistentvolumeclaims" = tostring(var.quota.pvcs)
+      "services.loadbalancers" = "0"
     }
   }
 }
