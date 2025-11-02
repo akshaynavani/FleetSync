@@ -1,0 +1,41 @@
+# ---- paths --------------------------------------------------------------
+fleetsync_root: "{{ playbook_dir | dirname }}"
+fleetsync_services_dir: "{{ fleetsync_root }}/services"
+fleetsync_k8s_dir: "{{ fleetsync_root }}/k8s"
+fleetsync_terraform_dir: "{{ fleetsync_root }}/terraform"
+
+# ---- tool versions (prerequisites role) -------------------------------
+kubectl_version: "v1.31.4"
+minikube_version: "v1.34.0"
+terraform_version: "1.9.8"
+tools_bin_dir: /usr/local/bin
+
+# ---- minikube cluster ----------------------------------------------------
+minikube_profile: fleetsync
+minikube_driver: docker
+minikube_kubernetes_version: "v1.31.4"
+minikube_nodes: 2
+minikube_cpus: 3
+minikube_memory_mb: 4096
+minikube_cni: calico
+minikube_addons:
+  - metrics-server
+  - ingress
+kube_context: "{{ minikube_profile }}"
+
+# ---- application ---------------------------------------------------------
+fleetsync_services:
+  - registry
+  - telemetry
+  - gateway
+image_tag: "1.0.0"
+
+# Environments to provision (Terraform) and deploy (Kustomize overlay of the same name).
+fleetsync_environments:
+  - dev
+  - staging
+
+terraform_enable_network_policies: true
+
+# ---- rollout / verification ---------------------------------------------
+rollout_timeout: 300s
