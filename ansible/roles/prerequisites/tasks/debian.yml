@@ -1,0 +1,76 @@
+---
+- name: Install base packages
+  become: true
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, unzip, conntrack, python3-pip]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install Docker engine
+  become: true
+  ansible.builtin.apt:
+    name: docker.io
+    state: present
+  when: prerequisites_install_docker
+
+- name: Ensure Docker is running
+  become: true
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+  when: prerequisites_install_docker
+
+- name: Allow the remote user to use Docker without sudo
+  become: true
+  ansible.builtin.user:
+    name: "{{ ansible_user_id }}"
+    groups: docker
+    append: true
+  when: prerequisites_install_docker
+
+- name: Check installed kubectl version
+  ansible.builtin.command: kubectl version --client=true -o json
+  register: prereq_kubectl
+  changed_when: false
+  failed_when: false
+
+- name: Install kubectl {{ kubectl_version }}
+  become: true
+  ansible.builtin.get_url:
+    url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/{{ prereq_arch }}/kubectl"
+    dest: "{{ tools_bin_dir }}/kubectl"
+    mode: "0755"
+    force: true
+  when: prereq_kubectl.rc != 0 or kubectl_version not in prereq_kubectl.stdout
+
+- name: Check installed minikube version
+  ansible.builtin.command: minikube version --short
+  register: prereq_minikube
+  changed_when: false
+  failed_when: false
+
+- name: Install minikube {{ minikube_version }}
+  become: true
+  ansible.builtin.get_url:
+    url: "https://storage.googleapis.com/minikube/releases/{{ minikube_version }}/minikube-linux-{{ prereq_arch }}"
+    dest: "{{ tools_bin_dir }}/minikube"
+    mode: "0755"
+    force: true
+  when: prereq_minikube.rc != 0 or minikube_version not in prereq_minikube.stdout
+
+- name: Check installed terraform version
+  ansible.builtin.command: terraform version
+  register: prereq_terraform
+  changed_when: false
+  failed_when: false
+
+- name: Install terraform {{ terraform_version }}
+  become: true
+  ansible.builtin.unarchive:
+    src: "https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_{{ prereq_arch }}.zip"
+    dest: "{{ tools_bin_dir }}"
+    remote_src: true
+    mode: "0755"
+  when: prereq_terraform.rc != 0 or terraform_version not in prereq_terraform.stdout

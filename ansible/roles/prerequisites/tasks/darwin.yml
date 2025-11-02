@@ -1,0 +1,30 @@
+---
+# On macOS we rely on Homebrew; Docker Desktop (or colima) must be installed separately.
+- name: Verify Homebrew is available
+  ansible.builtin.command: brew --version
+  changed_when: false
+
+- name: Install CLI tools with Homebrew
+  community.general.homebrew:
+    name:
+      - kubernetes-cli
+      - minikube
+      - hashicorp/tap/terraform
+    state: present
+
+- name: Install Python libraries for kubernetes.core
+  ansible.builtin.pip:
+    name: "{{ prerequisites_python_packages }}"
+    state: present
+    executable: "{{ ansible_playbook_python | dirname }}/pip3"
+
+- name: Check that a Docker daemon is reachable
+  ansible.builtin.command: docker info --format '{{ "{{" }}.ServerVersion{{ "}}" }}'
+  register: prereq_docker
+  changed_when: false
+  failed_when: false
+
+- name: Warn when Docker is not running
+  ansible.builtin.debug:
+    msg: "Docker is not reachable. Start Docker Desktop or colima before running the minikube role."
+  when: prereq_docker.rc != 0

@@ -1,0 +1,35 @@
+---
+- name: Resolve CPU architecture for binary downloads
+  ansible.builtin.set_fact:
+    prereq_arch: "{{ 'arm64' if ansible_architecture in ['aarch64', 'arm64'] else 'amd64' }}"
+    prereq_os: "{{ ansible_system | lower }}"
+
+- name: Install toolchain on Debian/Ubuntu
+  ansible.builtin.include_tasks: debian.yml
+  when: ansible_os_family == "Debian"
+
+- name: Install toolchain on macOS
+  ansible.builtin.include_tasks: darwin.yml
+  when: ansible_os_family == "Darwin"
+
+- name: Install Python libraries used by kubernetes.core modules
+  ansible.builtin.pip:
+    name: "{{ prerequisites_python_packages }}"
+    state: present
+    extra_args: --user
+  when: ansible_os_family != "Darwin"
+
+- name: Report tool versions
+  ansible.builtin.command: "{{ item }}"
+  loop:
+    - docker --version
+    - kubectl version --client=true
+    - minikube version --short
+    - terraform version
+  register: prereq_versions
+  changed_when: false
+  failed_when: false
+
+- name: Show tool versions
+  ansible.builtin.debug:
+    msg: "{{ prereq_versions.results | map(attribute='stdout_lines') | map('first', default='missing') | list }}"

@@ -1,0 +1,4 @@
+prerequisites_install_docker: true
+prerequisites_python_packages:
+  - kubernetes>=29.0.0
+  - PyYAML
