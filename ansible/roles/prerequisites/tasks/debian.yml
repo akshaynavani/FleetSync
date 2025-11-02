@@ -2,7 +2,7 @@
 - name: Install base packages
   become: true
   ansible.builtin.apt:
-    name: [ca-certificates, curl, unzip, conntrack, python3-pip]
+    name: [ca-certificates, curl, unzip, conntrack, python3-kubernetes, python3-yaml]
     state: present
     update_cache: true
     cache_valid_time: 3600

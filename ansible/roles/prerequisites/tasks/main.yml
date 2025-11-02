@@ -12,13 +12,6 @@
   ansible.builtin.include_tasks: darwin.yml
   when: ansible_os_family == "Darwin"
 
-- name: Install Python libraries used by kubernetes.core modules
-  ansible.builtin.pip:
-    name: "{{ prerequisites_python_packages }}"
-    state: present
-    extra_args: --user
-  when: ansible_os_family != "Darwin"
-
 - name: Report tool versions
   ansible.builtin.command: "{{ item }}"
   loop:
@@ -32,4 +25,7 @@
 
 - name: Show tool versions
   ansible.builtin.debug:
-    msg: "{{ prereq_versions.results | map(attribute='stdout_lines') | map('first', default='missing') | list }}"
+    msg: "{{ item.item }} -> {{ (item.stdout_lines | default([]) | first) | default('missing', true) }}"
+  loop: "{{ prereq_versions.results }}"
+  loop_control:
+    label: "{{ item.item }}"
