@@ -46,12 +46,6 @@ variable "container_defaults" {
   }
 }
 
-variable "ingress_controller_namespace" {
-  description = "Namespace of the ingress controller allowed to reach the gateway."
-  type        = string
-  default     = "ingress-nginx"
-}
-
 variable "enable_network_policies" {
   description = "Create default-deny + allow-list NetworkPolicies (needs a policy-enforcing CNI such as Calico)."
   type        = bool
