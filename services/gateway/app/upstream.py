@@ -11,8 +11,12 @@ from fastapi import HTTPException, status
 class Upstreams:
     def __init__(self, registry_url: str, telemetry_url: str, timeout_s: float = 5.0,
                  transport: httpx.AsyncBaseTransport | None = None) -> None:
-        self.registry = httpx.AsyncClient(base_url=registry_url, timeout=timeout_s, transport=transport)
-        self.telemetry = httpx.AsyncClient(base_url=telemetry_url, timeout=timeout_s, transport=transport)
+        # Short keep-alive expiry: kube-proxy balances per TCP connection, so long-lived
+        # pooled connections would keep hammering the old pods after the HPA scales out.
+        limits = httpx.Limits(max_connections=200, max_keepalive_connections=50, keepalive_expiry=5.0)
+        common = {"timeout": timeout_s, "limits": limits, "transport": transport}
+        self.registry = httpx.AsyncClient(base_url=registry_url, **common)
+        self.telemetry = httpx.AsyncClient(base_url=telemetry_url, **common)
 
     async def aclose(self) -> None:
         await self.registry.aclose()
