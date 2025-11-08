@@ -4,7 +4,7 @@
 
 module "environment" {
   source   = "./modules/environment"
-  for_each = var.environments
+  for_each = { for name, env in var.environments : name => env if contains(var.enabled_environments, name) }
 
   name                    = each.key
   quota                   = each.value.quota

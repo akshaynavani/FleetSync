@@ -1,22 +1,18 @@
 ---
 # Provision per-environment infrastructure (namespaces, quotas, network policies,
 # secrets) with Terraform. Only environments listed in fleetsync_environments are
-# kept; the rest of var.environments' defaults are filtered out.
-
-- name: Load default environment definitions from Terraform variables
-  ansible.builtin.set_fact:
-    tf_environments_filter: "{{ fleetsync_environments }}"
+# enabled; their sizing comes from the defaults in terraform/variables.tf.
 
 - name: Apply Terraform
   community.general.terraform:
     project_path: "{{ fleetsync_terraform_dir }}"
     state: "{{ terraform_state | default('present') }}"
     force_init: true
+    complex_vars: true
     variables:
       kube_context: "{{ kube_context }}"
-      enable_network_policies: "{{ terraform_enable_network_policies | string | lower }}"
-    complex_vars: false
-    targets: "{{ fleetsync_environments | map('regex_replace', '^(.*)$', 'module.environment[\"\\1\"]') | list }}"
+      enable_network_policies: "{{ terraform_enable_network_policies | bool }}"
+      enabled_environments: "{{ fleetsync_environments }}"
   register: tf_result
 
 - name: Show Terraform outputs

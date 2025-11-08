@@ -16,6 +16,12 @@ variable "enable_network_policies" {
   default     = true
 }
 
+variable "enabled_environments" {
+  description = "Subset of var.environments to actually provision."
+  type        = list(string)
+  default     = ["dev", "staging"]
+}
+
 variable "environments" {
   description = "Environments to provision, keyed by name. Each becomes namespace fleetsync-<name>."
   type = map(object({
