@@ -1,0 +1,6 @@
+---
+- name: Deploy each environment
+  ansible.builtin.include_tasks: environment.yml
+  loop: "{{ fleetsync_environments }}"
+  loop_control:
+    loop_var: env_name

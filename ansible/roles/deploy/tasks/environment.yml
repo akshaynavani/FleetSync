@@ -1,0 +1,51 @@
+---
+- name: "[{{ env_name }}] Create generated kustomization directory"
+  ansible.builtin.file:
+    path: "{{ fleetsync_k8s_dir }}/.generated/{{ env_name }}"
+    state: directory
+    mode: "0755"
+
+- name: "[{{ env_name }}] Render kustomization pinned to {{ image_tag }}"
+  ansible.builtin.template:
+    src: kustomization.yaml.j2
+    dest: "{{ fleetsync_k8s_dir }}/.generated/{{ env_name }}/kustomization.yaml"
+    mode: "0644"
+
+- name: "[{{ env_name }}] Confirm the Terraform-managed namespace exists"
+  kubernetes.core.k8s_info:
+    context: "{{ kube_context }}"
+    kind: Namespace
+    name: "fleetsync-{{ env_name }}"
+  register: deploy_ns
+  failed_when: deploy_ns.resources | length == 0
+
+- name: "[{{ env_name }}] Apply manifests"
+  ansible.builtin.command: >-
+    kubectl --context {{ kube_context }} apply
+    -k {{ fleetsync_k8s_dir }}/.generated/{{ env_name }}
+  register: deploy_apply
+  changed_when: "'configured' in deploy_apply.stdout or 'created' in deploy_apply.stdout"
+
+- name: "[{{ env_name }}] Wait for Redis"
+  ansible.builtin.command: >-
+    kubectl --context {{ kube_context }} -n fleetsync-{{ env_name }}
+    rollout status statefulset/redis --timeout={{ rollout_timeout }}
+  changed_when: false
+
+- name: "[{{ env_name }}] Wait for service rollouts"
+  ansible.builtin.command: >-
+    kubectl --context {{ kube_context }} -n fleetsync-{{ env_name }}
+    rollout status deployment/{{ item }} --timeout={{ rollout_timeout }}
+  loop: "{{ fleetsync_services }}"
+  changed_when: false
+
+- name: "[{{ env_name }}] Summarise workloads"
+  ansible.builtin.command: >-
+    kubectl --context {{ kube_context }} -n fleetsync-{{ env_name }}
+    get deploy,sts,hpa,svc,ingress
+  register: deploy_summary
+  changed_when: false
+
+- name: "[{{ env_name }}] Workloads"
+  ansible.builtin.debug:
+    var: deploy_summary.stdout_lines
