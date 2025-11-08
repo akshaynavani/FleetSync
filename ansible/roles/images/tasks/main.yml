@@ -1,0 +1,29 @@
+---
+# Build service images directly inside the Minikube nodes so no registry is needed.
+# `--all` builds on every node of the multi-node cluster, which keeps
+# imagePullPolicy: IfNotPresent working wherever the scheduler places a pod.
+
+- name: Build service images inside Minikube
+  ansible.builtin.command: >-
+    minikube -p {{ minikube_profile }} image build
+    --all
+    -t fleetsync/{{ item }}:{{ image_tag }}
+    -f {{ item }}/Dockerfile
+    .
+  args:
+    chdir: "{{ fleetsync_services_dir }}"
+  loop: "{{ fleetsync_services }}"
+  changed_when: true
+
+- name: List FleetSync images available to the cluster
+  ansible.builtin.shell: >-
+    set -o pipefail;
+    minikube -p {{ minikube_profile }} image ls --format table | grep fleetsync
+  args:
+    executable: /bin/bash
+  register: images_list
+  changed_when: false
+
+- name: Show images
+  ansible.builtin.debug:
+    var: images_list.stdout_lines

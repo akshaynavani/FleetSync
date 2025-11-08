@@ -1,0 +1,59 @@
+---
+# Bring up a multi-node Minikube cluster with a policy-enforcing CNI and the addons
+# FleetSync depends on (metrics-server for the HPA, ingress-nginx for the Ingress).
+
+- name: Check Minikube profile status
+  ansible.builtin.command: minikube status -p {{ minikube_profile }} --output json
+  register: mk_status
+  changed_when: false
+  failed_when: false
+
+- name: Determine whether the cluster is already running
+  ansible.builtin.set_fact:
+    mk_running: >-
+      {{ mk_status.rc == 0 and
+         ((mk_status.stdout | from_json) if (mk_status.stdout | trim).startswith('{')
+          else (mk_status.stdout | from_json | first)).Host | default('') == 'Running' }}
+  when: mk_status.stdout | trim | length > 0
+
+- name: Start Minikube profile {{ minikube_profile }}
+  ansible.builtin.command: >-
+    minikube start
+    -p {{ minikube_profile }}
+    --driver={{ minikube_driver }}
+    --kubernetes-version={{ minikube_kubernetes_version }}
+    --nodes={{ minikube_nodes }}
+    --cpus={{ minikube_cpus }}
+    --memory={{ minikube_memory_mb }}
+    --cni={{ minikube_cni }}
+    --wait=all
+  when: not (mk_running | default(false) | bool)
+  changed_when: true
+
+- name: Enable addons
+  ansible.builtin.command: minikube -p {{ minikube_profile }} addons enable {{ item }}
+  loop: "{{ minikube_addons }}"
+  register: mk_addons
+  changed_when: "'enabled' in mk_addons.stdout and 'already' not in mk_addons.stdout"
+
+- name: Wait for metrics-server to become available
+  ansible.builtin.command: >-
+    kubectl --context {{ kube_context }} -n kube-system
+    rollout status deployment/metrics-server --timeout={{ rollout_timeout }}
+  changed_when: false
+
+- name: Wait for the ingress-nginx controller
+  ansible.builtin.command: >-
+    kubectl --context {{ kube_context }} -n ingress-nginx
+    rollout status deployment/ingress-nginx-controller --timeout={{ rollout_timeout }}
+  changed_when: false
+  when: "'ingress' in minikube_addons"
+
+- name: List cluster nodes
+  ansible.builtin.command: kubectl --context {{ kube_context }} get nodes -o wide
+  register: mk_nodes
+  changed_when: false
+
+- name: Show cluster nodes
+  ansible.builtin.debug:
+    var: mk_nodes.stdout_lines
