@@ -1,0 +1,2 @@
+verify_job_timeout: 180s
+verify_curl_image: curlimages/curl:8.11.1

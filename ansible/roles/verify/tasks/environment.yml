@@ -1,0 +1,39 @@
+---
+- name: "[{{ env_name }}] Pick a unique run id"
+  ansible.builtin.set_fact:
+    verify_run_id: "{{ lookup('pipe', 'date +%s') }}"
+
+- name: "[{{ env_name }}] Launch smoke-test Job"
+  kubernetes.core.k8s:
+    context: "{{ kube_context }}"
+    state: present
+    definition: "{{ lookup('template', 'smoke-job.yaml.j2') | from_yaml }}"
+
+- name: "[{{ env_name }}] Wait for smoke-test Job to finish"
+  ansible.builtin.command: >-
+    kubectl --context {{ kube_context }} -n fleetsync-{{ env_name }}
+    wait --for=condition=complete job/fleetsync-smoke-{{ verify_run_id }}
+    --timeout={{ verify_job_timeout }}
+  register: verify_wait
+  changed_when: false
+  failed_when: false
+
+- name: "[{{ env_name }}] Collect smoke-test logs"
+  ansible.builtin.command: >-
+    kubectl --context {{ kube_context }} -n fleetsync-{{ env_name }}
+    logs job/fleetsync-smoke-{{ verify_run_id }}
+  register: verify_logs
+  changed_when: false
+  failed_when: false
+
+- name: "[{{ env_name }}] Smoke-test output"
+  ansible.builtin.debug:
+    var: verify_logs.stdout_lines
+
+- name: "[{{ env_name }}] Fail if the smoke test did not pass"
+  ansible.builtin.assert:
+    that:
+      - verify_wait.rc == 0
+      - "'SMOKE TEST PASSED' in verify_logs.stdout"
+    fail_msg: "Smoke test failed in fleetsync-{{ env_name }}"
+    success_msg: "fleetsync-{{ env_name }} is healthy"

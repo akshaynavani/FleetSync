@@ -1,0 +1,54 @@
+# In-cluster smoke test: runs from inside the namespace so it works with every
+# Minikube driver (no NodePort/tunnel needed) and exercises the real Service DNS.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fleetsync-smoke-{{ verify_run_id }}
+  namespace: fleetsync-{{ env_name }}
+  labels:
+    app.kubernetes.io/part-of: fleetsync
+    app.kubernetes.io/component: smoke-test
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: smoke-test
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+      containers:
+        - name: smoke
+          image: {{ verify_curl_image }}
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 64Mi}
+          env:
+            - name: GW
+              value: http://gateway:8080
+            - name: VID
+              value: smoke-{{ verify_run_id }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              j='Content-Type: application/json'
+              step() { echo "==> $*"; }
+              step healthz;   curl -fsS "$GW/healthz"; echo
+              step readyz;    curl -fsS "$GW/readyz"; echo
+              step register;  curl -fsS -X POST -H "$j" "$GW/api/vehicles" \
+                                -d "{\"id\":\"$VID\",\"model\":\"SmokeVan\",\"depot\":\"smoke\"}"; echo
+              step activate;  curl -fsS -X PATCH -H "$j" "$GW/api/vehicles/$VID/status" -d '{"status":"active"}'; echo
+              for i in 1 2 3; do
+                curl -fsS -X POST -H "$j" "$GW/api/vehicles/$VID/telemetry" \
+                  -d "{\"lat\":40.7$i,\"lon\":-74.0$i,\"speed_kph\":5$i,\"fuel_pct\":8$i,\"engine_temp_c\":9$i}" > /dev/null
+              done
+              step summary;   curl -fsS "$GW/api/vehicles/$VID/summary"; echo
+              step overview;  curl -fsS "$GW/api/fleet/overview" > /dev/null
+              step route;     curl -fsS -X POST -H "$j" "$GW/api/routes/optimize" \
+                                -d '{"depot":{"lat":40.7,"lon":-74.0},"stops":[{"id":"a","lat":40.8,"lon":-73.9},{"id":"b","lat":40.6,"lon":-74.1},{"id":"c","lat":40.75,"lon":-73.95}]}'; echo
+              step cleanup;   curl -fsS -X DELETE "$GW/api/vehicles/$VID"
+              echo "SMOKE TEST PASSED"
