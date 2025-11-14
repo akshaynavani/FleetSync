@@ -1,0 +1,30 @@
+---
+# Full bring-up: tooling on every host, then cluster, infrastructure, images,
+# workloads and verification on the control node.
+#
+#   ansible-galaxy collection install -r requirements.yml
+#   ansible-playbook site.yml
+#
+# Useful tags: prerequisites, cluster, terraform, images, deploy, verify
+
+- name: Install toolchain on all hosts
+  hosts: all
+  gather_facts: true
+  roles:
+    - role: prerequisites
+      tags: [prerequisites]
+
+- name: Provision cluster and deploy FleetSync
+  hosts: control
+  gather_facts: false
+  roles:
+    - role: minikube
+      tags: [cluster]
+    - role: terraform
+      tags: [terraform]
+    - role: images
+      tags: [images]
+    - role: deploy
+      tags: [deploy]
+    - role: verify
+      tags: [verify]

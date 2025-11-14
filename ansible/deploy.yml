@@ -1,0 +1,15 @@
+---
+# Redeploy onto an already-running cluster: rebuild images, reconcile Terraform,
+# roll out manifests and smoke-test.
+#
+#   ansible-playbook deploy.yml -e image_tag=1.0.1
+#   ansible-playbook deploy.yml -e '{"fleetsync_environments": ["dev"]}'
+
+- name: Redeploy FleetSync
+  hosts: control
+  gather_facts: false
+  roles:
+    - terraform
+    - images
+    - deploy
+    - verify

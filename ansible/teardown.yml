@@ -1,0 +1,34 @@
+---
+# Remove workloads and Terraform-managed infrastructure. Pass -e delete_cluster=true
+# to also delete the Minikube profile.
+
+- name: Tear down FleetSync
+  hosts: control
+  gather_facts: false
+  vars:
+    delete_cluster: false
+  tasks:
+    - name: Delete workloads per environment
+      ansible.builtin.command: >-
+        kubectl --context {{ kube_context }} delete
+        -k {{ fleetsync_k8s_dir }}/overlays/{{ item }} --ignore-not-found --wait=true
+      loop: "{{ fleetsync_environments }}"
+      register: teardown_delete
+      changed_when: "'deleted' in teardown_delete.stdout"
+      failed_when: false
+
+    - name: Destroy Terraform-managed environments
+      ansible.builtin.include_role:
+        name: terraform
+      vars:
+        terraform_state: absent
+
+    - name: Remove generated kustomizations
+      ansible.builtin.file:
+        path: "{{ fleetsync_k8s_dir }}/.generated"
+        state: absent
+
+    - name: Delete the Minikube profile
+      ansible.builtin.command: minikube delete -p {{ minikube_profile }}
+      when: delete_cluster | bool
+      changed_when: true
