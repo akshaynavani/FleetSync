@@ -102,25 +102,24 @@ class FleetUser(HttpUser):
                 resp.failure("route response did not include every stop")
 
 
-class StepLoad(LoadTestShape):
-    """Ramp in steps so the HPA has time to react between plateaus, then cool down.
+if os.getenv("LOAD_SHAPE") == "step":
+    # Locust auto-uses any LoadTestShape it finds in the module, so only define one
+    # when explicitly requested; otherwise -u/-r/-t on the command line apply.
 
-    Enabled only when LOAD_SHAPE=step; otherwise -u/-r/-t on the command line apply.
-    """
+    class StepLoad(LoadTestShape):
+        """Ramp in steps so the HPA has time to react between plateaus, then cool down."""
 
-    stages = [
-        (60, 10, 2),    # (until second, users, spawn rate)
-        (180, 30, 5),
-        (300, 60, 5),
-        (420, 60, 5),
-        (480, 5, 10),   # cool-down so scale-in can be observed
-    ]
+        stages = [
+            (60, 10, 2),    # (until second, users, spawn rate)
+            (180, 30, 5),
+            (300, 60, 5),
+            (420, 60, 5),
+            (480, 5, 10),   # cool-down so scale-in starts to show
+        ]
 
-    def tick(self):
-        if os.getenv("LOAD_SHAPE") != "step":
+        def tick(self):
+            run_time = self.get_run_time()
+            for until, users, rate in self.stages:
+                if run_time < until:
+                    return users, rate
             return None
-        run_time = self.get_run_time()
-        for until, users, rate in self.stages:
-            if run_time < until:
-                return users, rate
-        return None
