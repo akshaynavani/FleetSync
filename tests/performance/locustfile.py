@@ -18,6 +18,7 @@ import os
 import random
 import uuid
 
+import requests  # ships with locust, so the file also runs in the stock locust image
 from locust import HttpUser, LoadTestShape, between, events, task
 
 FLEET_SIZE = int(os.getenv("FLEET_SIZE", "50"))
@@ -32,23 +33,19 @@ FLEET = [f"load-{RUN_ID}-{i:03d}" for i in range(FLEET_SIZE)]
 @events.test_start.add_listener
 def register_fleet(environment, **_kwargs):
     """Register the simulated fleet once before users start."""
-    import httpx
-
-    host = environment.host or "http://localhost:8080"
-    with httpx.Client(base_url=host, timeout=30) as client:
+    host = (environment.host or "http://localhost:8080").rstrip("/")
+    with requests.Session() as session:
         for vid in FLEET:
-            client.post("/api/vehicles", json={"id": vid, "model": "LoadVan", "depot": f"load-{RUN_ID}"})
-            client.patch(f"/api/vehicles/{vid}/status", json={"status": "active"})
+            session.post(f"{host}/api/vehicles", json={"id": vid, "model": "LoadVan", "depot": f"load-{RUN_ID}"}, timeout=30)
+            session.patch(f"{host}/api/vehicles/{vid}/status", json={"status": "active"}, timeout=30)
 
 
 @events.test_stop.add_listener
 def remove_fleet(environment, **_kwargs):
-    import httpx
-
-    host = environment.host or "http://localhost:8080"
-    with httpx.Client(base_url=host, timeout=30) as client:
+    host = (environment.host or "http://localhost:8080").rstrip("/")
+    with requests.Session() as session:
         for vid in FLEET:
-            client.delete(f"/api/vehicles/{vid}")
+            session.delete(f"{host}/api/vehicles/{vid}", timeout=30)
 
 
 class FleetUser(HttpUser):
