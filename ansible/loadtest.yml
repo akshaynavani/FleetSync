@@ -1,0 +1,11 @@
+---
+# Performance test + autoscaling validation.
+#
+#   ansible-playbook loadtest.yml
+#   ansible-playbook loadtest.yml -e loadtest_env=staging -e loadtest_users=120
+
+- name: Load-test FleetSync and validate horizontal pod autoscaling
+  hosts: control
+  gather_facts: false
+  roles:
+    - loadtest

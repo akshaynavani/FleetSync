@@ -1,0 +1,12 @@
+loadtest_env: dev
+loadtest_image: locustio/locust:2.32.4
+loadtest_users: 60
+loadtest_spawn_rate: 5
+loadtest_duration: 5m
+loadtest_duration_seconds: 300
+loadtest_route_stops: 120
+loadtest_fleet_size: 50
+# Extra time the HPA watcher keeps sampling after the load stops, to capture scale-in.
+loadtest_cooldown_seconds: 180
+loadtest_expect_scale_out: telemetry
+loadtest_results_dir: "{{ fleetsync_root }}/results"

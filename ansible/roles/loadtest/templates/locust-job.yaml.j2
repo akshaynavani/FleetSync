@@ -1,0 +1,50 @@
+# Runs Locust headless *inside* the cluster so the load generator talks to the
+# gateway Service directly (kube-proxy load balancing), not through a port-forward.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fleetsync-loadtest-{{ loadtest_run_id }}
+  namespace: fleetsync-{{ loadtest_env }}
+  labels:
+    app.kubernetes.io/part-of: fleetsync
+    app.kubernetes.io/component: loadtest
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: loadtest
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: locust
+          image: {{ loadtest_image }}
+          args:
+            - -f
+            - /mnt/locust/locustfile.py
+            - --host
+            - http://gateway:8080
+            - --headless
+            - --users
+            - "{{ loadtest_users }}"
+            - --spawn-rate
+            - "{{ loadtest_spawn_rate }}"
+            - --run-time
+            - "{{ loadtest_duration }}"
+            - --only-summary
+          env:
+            - name: FLEET_SIZE
+              value: "{{ loadtest_fleet_size }}"
+            - name: ROUTE_STOPS
+              value: "{{ loadtest_route_stops }}"
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          volumeMounts:
+            - name: locustfile
+              mountPath: /mnt/locust
+      volumes:
+        - name: locustfile
+          configMap:
+            name: fleetsync-locustfile

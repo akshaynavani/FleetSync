@@ -1,0 +1,95 @@
+---
+- name: Pick a run id
+  ansible.builtin.set_fact:
+    loadtest_run_id: "{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}"
+    loadtest_ns: "fleetsync-{{ loadtest_env }}"
+
+- name: Ensure results directory exists
+  ansible.builtin.file:
+    path: "{{ loadtest_results_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Record HPA state before the run
+  ansible.builtin.command: kubectl --context {{ kube_context }} -n {{ loadtest_ns }} get hpa
+  register: loadtest_hpa_before
+  changed_when: false
+
+- name: Publish the locustfile as a ConfigMap
+  kubernetes.core.k8s:
+    context: "{{ kube_context }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: fleetsync-locustfile
+        namespace: "{{ loadtest_ns }}"
+      data:
+        locustfile.py: "{{ lookup('file', fleetsync_root + '/tests/performance/locustfile.py') }}"
+
+- name: Start the HPA watcher in the background
+  ansible.builtin.command: >-
+    python3 {{ fleetsync_root }}/scripts/hpa_watch.py
+    --context {{ kube_context }} -n {{ loadtest_ns }}
+    --interval 10
+    --duration {{ loadtest_duration_seconds | int + loadtest_cooldown_seconds | int }}
+    --out {{ loadtest_results_dir }}/hpa-{{ loadtest_env }}-{{ loadtest_run_id }}.csv
+    {{ ('--expect-scale-out ' + loadtest_expect_scale_out) if loadtest_expect_scale_out else '' }}
+  async: "{{ loadtest_duration_seconds | int + loadtest_cooldown_seconds | int + 120 }}"
+  poll: 0
+  register: loadtest_watcher
+  changed_when: false
+
+- name: Launch the Locust Job
+  kubernetes.core.k8s:
+    context: "{{ kube_context }}"
+    state: present
+    definition: "{{ lookup('template', 'locust-job.yaml.j2') | from_yaml }}"
+
+- name: Wait for the load test to complete
+  ansible.builtin.command: >-
+    kubectl --context {{ kube_context }} -n {{ loadtest_ns }}
+    wait --for=condition=complete job/fleetsync-loadtest-{{ loadtest_run_id }}
+    --timeout={{ loadtest_duration_seconds | int + 180 }}s
+  changed_when: false
+  register: loadtest_wait
+  failed_when: false
+
+- name: Collect Locust summary
+  ansible.builtin.command: >-
+    kubectl --context {{ kube_context }} -n {{ loadtest_ns }}
+    logs job/fleetsync-loadtest-{{ loadtest_run_id }} --tail=60
+  register: loadtest_logs
+  changed_when: false
+
+- name: Save Locust summary
+  ansible.builtin.copy:
+    content: "{{ loadtest_logs.stdout }}\n"
+    dest: "{{ loadtest_results_dir }}/locust-{{ loadtest_env }}-{{ loadtest_run_id }}.txt"
+    mode: "0644"
+
+- name: Wait for the HPA watcher (captures scale-in during cool-down)
+  ansible.builtin.async_status:
+    jid: "{{ loadtest_watcher.ansible_job_id }}"
+  register: loadtest_watch_result
+  until: loadtest_watch_result.finished
+  retries: "{{ ((loadtest_cooldown_seconds | int + 120) / 10) | int }}"
+  delay: 10
+  failed_when: false
+
+- name: Report
+  ansible.builtin.debug:
+    msg:
+      - "HPA before: {{ loadtest_hpa_before.stdout_lines }}"
+      - "Locust: {{ loadtest_logs.stdout_lines[-25:] }}"
+      - "HPA watcher: {{ (loadtest_watch_result.stdout | default('')).splitlines()[-6:] }}"
+      - "Results written to {{ loadtest_results_dir }}"
+
+- name: Assert the load test passed and autoscaling kicked in
+  ansible.builtin.assert:
+    that:
+      - loadtest_wait.rc == 0
+      - loadtest_watch_result.rc | default(1) == 0
+    fail_msg: "Load test failed or {{ loadtest_expect_scale_out }} did not scale out (see results/)"
+    success_msg: "Load test completed and {{ loadtest_expect_scale_out }} scaled out"
